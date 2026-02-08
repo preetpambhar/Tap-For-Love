@@ -3,6 +3,8 @@ import SwiftUI
 struct CreateQuizView: View {
     @StateObject private var viewModel = QuizViewModel()
     @State private var showAddQuestion = false
+    @State private var shareItem: ShareItem?
+    
 
     var body: some View {
         NavigationStack {
@@ -31,7 +33,8 @@ struct CreateQuizView: View {
                 Button("Generate Love Link 💘") {
                     let quiz = viewModel.buildQuiz()
                     if let url = generateShareLink(from: quiz) {
-                        print(url.absoluteString)
+                        shareItem = ShareItem(url: url)
+                       print(url)
                     }
                 }
                 .disabled(viewModel.questions.isEmpty)
@@ -43,6 +46,12 @@ struct CreateQuizView: View {
                 AddQuestionView { newQuestion in
                     viewModel.addQuestion(newQuestion)
                 }
+            }
+            .sheet(item: $shareItem) { item in
+                ShareSheet(items: [
+                    "I made a Valentine game for you 💖\nAnswer honestly 😏",
+                    item.url
+                ])
             }
         }
     }
