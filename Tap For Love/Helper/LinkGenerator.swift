@@ -2,7 +2,10 @@ import Foundation
 
 func generateShareLink(from quiz: LoveQuiz) -> URL? {
     do {
-        let data = try JSONEncoder().encode(quiz)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = []
+        
+        let data = try encoder.encode(quiz)
         let base64 = data.base64EncodedString()
 
         let encodedString = base64.addingPercentEncoding(
@@ -11,7 +14,7 @@ func generateShareLink(from quiz: LoveQuiz) -> URL? {
 
         guard let encodedString else { return nil }
 
-        let urlString = "https://yourname.github.io/lovetest/?q=\(encodedString)"
+        let urlString = "https://tap-for-love-web.vercel.app/?q=\(encodedString)"
         return URL(string: urlString)
 
     } catch {
@@ -19,4 +22,3 @@ func generateShareLink(from quiz: LoveQuiz) -> URL? {
         return nil
     }
 }
-
