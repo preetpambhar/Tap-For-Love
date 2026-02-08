@@ -7,7 +7,7 @@ struct AddQuestionView: View {
     @State private var options = ["", "", ""]
     @State private var correctIndex = 0
     @State private var rightMessage = "You got it right 💖"
-    @State private var wrongMessage = "Oops… try harder 😏"
+    @State private var wrongMessage = "Oops... try harder 😏"  
 
     let onSave: (QuizQuestion) -> Void
 
