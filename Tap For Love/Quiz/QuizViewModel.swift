@@ -9,6 +9,11 @@ class QuizViewModel: ObservableObject {
     func addQuestion(_ question: QuizQuestion) {
         questions.append(question)
     }
+    
+    func deleteQuestion(at index: Int) {
+        guard index >= 0 && index < questions.count else { return }
+        questions.remove(at: index)
+    }
 
     func buildQuiz() -> LoveQuiz {
         return LoveQuiz(
@@ -18,4 +23,3 @@ class QuizViewModel: ObservableObject {
         )
     }
 }
-
