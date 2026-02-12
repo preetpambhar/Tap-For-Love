@@ -8,6 +8,12 @@ struct CreateQuizView: View {
     @State private var isGenerating = false
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var showQRCode = false
+    @State private var editingQuestion: QuizQuestion?
+    @State private var editingIndex: Int?
+    @State private var generatedURL: URL?
+    
+    @FocusState private var isTopicFocused: Bool
     
     private let aiGenerator = SmartQuestionGenerator()
 
@@ -21,6 +27,9 @@ struct CreateQuizView: View {
                     endPoint: .bottomTrailing
                 )
                 .ignoresSafeArea()
+                .onTapGesture {
+                    isTopicFocused = false
+                }
                 
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 24) {
@@ -80,17 +89,52 @@ struct CreateQuizView: View {
                                 Spacer()
                             }
                             
-                            // Topic Input
-                            HStack(spacing: 12) {
-                                Image(systemName: "text.bubble.fill")
-                                    .foregroundColor(.purple)
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "text.bubble.fill")
+                                        .foregroundColor(.purple)
+                                        .font(.system(size: 14))
+                                    
+                                    Text("Describe your topic")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.secondary)
+                                }
                                 
-                                TextField("e.g., 'our relationship', 'my hobbies'", text: $aiTopic)
-                                    .textFieldStyle(.plain)
+                                ZStack(alignment: .topLeading) {
+                                    if aiTopic.isEmpty {
+                                        Text("e.g., 'our relationship', 'my hobbies', 'favorite foods', 'travel memories'")
+                                            .foregroundColor(.gray.opacity(0.5))
+                                            .font(.body)
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 8)
+                                            .allowsHitTesting(false)
+                                    }
+                                    
+                                    TextEditor(text: $aiTopic)
+                                        .font(.body)
+                                        .frame(minHeight: 70, maxHeight: 150)
+                                        .scrollContentBackground(.hidden)
+                                        .background(Color.clear)
+                                        .opacity(aiTopic.isEmpty ? 0.5 : 1)
+                                        .focused($isTopicFocused)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.purple.opacity(0.05))
+                                .cornerRadius(12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(aiTopic.isEmpty ? Color.gray.opacity(0.2) : Color.purple.opacity(0.4), lineWidth: 1.5)
+                                )
                             }
-                            .padding()
-                            .background(Color.purple.opacity(0.05))
-                            .cornerRadius(12)
+                            
+                            HStack {
+                                Spacer()
+                                Text("\(aiTopic.count) characters")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
                             
                             // Generate Button
                             Button(action: generateWithAI) {
@@ -117,9 +161,10 @@ struct CreateQuizView: View {
                                 )
                                 .foregroundColor(.white)
                                 .cornerRadius(12)
+                                .shadow(color: aiTopic.isEmpty ? .clear : .purple.opacity(0.2), radius: 6, x: 0, y: 3)
                             }
                             .disabled(aiTopic.isEmpty || isGenerating)
-                            .animation(.easeInOut, value: aiTopic.isEmpty)
+                            .animation(.easeInOut(duration: 0.2), value: aiTopic.isEmpty)
                         }
                         .padding()
                         .background(Color.white)
@@ -154,7 +199,6 @@ struct CreateQuizView: View {
                             .padding(.horizontal)
                             
                             if viewModel.questions.isEmpty {
-                                // Empty State
                                 VStack(spacing: 20) {
                                     ZStack {
                                         Circle()
@@ -192,7 +236,6 @@ struct CreateQuizView: View {
                                 .padding(.horizontal)
                                 
                             } else {
-                                // Questions List
                                 VStack(spacing: 12) {
                                     ForEach(Array(viewModel.questions.enumerated()), id: \.element.id) { index, question in
                                         QuestionCard(
@@ -202,6 +245,12 @@ struct CreateQuizView: View {
                                                 withAnimation {
                                                     viewModel.deleteQuestion(at: index)
                                                 }
+                                            },
+                                            onEdit: {
+                                                isTopicFocused = false
+                                                editingQuestion = question
+                                                editingIndex = index
+                                                showAddQuestion = true
                                             }
                                         )
                                     }
@@ -210,9 +259,11 @@ struct CreateQuizView: View {
                             }
                         }
                         
-                        // Bottom Actions
                         VStack(spacing: 12) {
-                            Button(action: { showAddQuestion = true }) {
+                            Button(action: {
+                                isTopicFocused = false
+                                showAddQuestion = true
+                            }) {
                                 HStack {
                                     Image(systemName: "plus.circle.fill")
                                         .font(.system(size: 20))
@@ -231,9 +282,12 @@ struct CreateQuizView: View {
                             }
                             
                             Button(action: {
+                                isTopicFocused = false
                                 let quiz = viewModel.buildQuiz()
                                 if let url = generateShareLink(from: quiz) {
+                                    generatedURL = url
                                     shareItem = ShareItem(url: url)
+                                    showQRCode = true
                                 }
                             }) {
                                 HStack {
@@ -259,23 +313,34 @@ struct CreateQuizView: View {
                         }
                         .padding(.horizontal)
                         .padding(.bottom, 20)
+                        .sheet(isPresented: $showQRCode) {
+                            if let url = generatedURL {
+                                QRCodeView(url: url, quizTitle: viewModel.title)
+                            }
+                        }
                     }
                 }
+                .simultaneousGesture( 
+                    TapGesture().onEnded {
+                        isTopicFocused = false
+                    }
+                )
             }
             .navigationTitle("Create Love Game")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showAddQuestion) {
-                AddQuestionView { newQuestion in
+                AddQuestionView(existingQuestion: editingQuestion) { updatedQuestion in
                     withAnimation {
-                        viewModel.addQuestion(newQuestion)
+                        if let index = editingIndex {
+                            viewModel.questions[index] = updatedQuestion
+                        } else {
+                            viewModel.addQuestion(updatedQuestion)
+                        }
                     }
+                    // Reset
+                    editingQuestion = nil
+                    editingIndex = nil
                 }
-            }
-            .sheet(item: $shareItem) { item in
-                ShareSheet(items: [
-                    "I made a Valentine game for you 💖\nAnswer honestly 😏",
-                    item.url
-                ])
             }
             .alert("Success!", isPresented: $showError) {
                 Button("OK", role: .cancel) { }
@@ -320,6 +385,7 @@ struct QuestionCard: View {
     let number: Int
     let question: QuizQuestion
     let onDelete: () -> Void
+    let onEdit: () -> Void
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -364,14 +430,24 @@ struct QuestionCard: View {
             
             Spacer()
             
-            // Delete Button
-            Button(action: onDelete) {
-                Image(systemName: "trash.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(.red.opacity(0.7))
-                    .padding(8)
-                    .background(Color.red.opacity(0.1))
-                    .clipShape(Circle())
+            HStack(spacing: 8) {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 14))
+                        .foregroundColor(.blue.opacity(0.7))
+                        .padding(8)
+                        .background(Color.blue.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                
+                Button(action: onDelete) {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.red.opacity(0.7))
+                        .padding(8)
+                        .background(Color.red.opacity(0.1))
+                        .clipShape(Circle())
+                }
             }
         }
         .padding()
