@@ -2,16 +2,12 @@ import SwiftUI
 
 struct CreateQuizView: View {
     @StateObject private var viewModel = QuizViewModel()
-    @State private var showAddQuestion = false
     @State private var shareItem: ShareItem?
     @State private var aiTopic = ""
     @State private var isGenerating = false
     @State private var showError = false
     @State private var errorMessage = ""
-    @State private var showQRCode = false
-    @State private var editingQuestion: QuizQuestion?
-    @State private var editingIndex: Int?
-    @State private var generatedURL: URL?
+    @State private var activeSheet: ActiveSheet?
     
     @FocusState private var isTopicFocused: Bool
     
@@ -248,9 +244,7 @@ struct CreateQuizView: View {
                                             },
                                             onEdit: {
                                                 isTopicFocused = false
-                                                editingQuestion = question
-                                                editingIndex = index
-                                                showAddQuestion = true
+                                                activeSheet = .edit(question, index)
                                             }
                                         )
                                     }
@@ -262,7 +256,7 @@ struct CreateQuizView: View {
                         VStack(spacing: 12) {
                             Button(action: {
                                 isTopicFocused = false
-                                showAddQuestion = true
+                                activeSheet = .add
                             }) {
                                 HStack {
                                     Image(systemName: "plus.circle.fill")
@@ -285,10 +279,8 @@ struct CreateQuizView: View {
                                 isTopicFocused = false
                                 let quiz = viewModel.buildQuiz()
                                 if let url = generateShareLink(from: quiz) {
-                                    generatedURL = url
-                                    shareItem = ShareItem(url: url)
-                                    showQRCode = true
-                                }
+                                      activeSheet = .qr(url)
+                                  }
                             }) {
                                 HStack {
                                     Image(systemName: "heart.fill")
@@ -313,11 +305,6 @@ struct CreateQuizView: View {
                         }
                         .padding(.horizontal)
                         .padding(.bottom, 20)
-                        .sheet(isPresented: $showQRCode) {
-                            if let url = generatedURL {
-                                QRCodeView(url: url, quizTitle: viewModel.title)
-                            }
-                        }
                     }
                 }
                 .simultaneousGesture( 
@@ -328,18 +315,23 @@ struct CreateQuizView: View {
             }
             .navigationTitle("Create Love Game")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showAddQuestion) {
-                AddQuestionView(existingQuestion: editingQuestion) { updatedQuestion in
-                    withAnimation {
-                        if let index = editingIndex {
-                            viewModel.questions[index] = updatedQuestion
-                        } else {
-                            viewModel.addQuestion(updatedQuestion)
-                        }
+            .sheet(item: $activeSheet) { sheet in
+                switch sheet {
+
+                case .add:
+                    AddQuestionView(existingQuestion: nil) { newQuestion in
+                        viewModel.addQuestion(newQuestion)
+                        activeSheet = nil
                     }
-                    // Reset
-                    editingQuestion = nil
-                    editingIndex = nil
+
+                case .edit(let question, let index):
+                    AddQuestionView(existingQuestion: question) { updatedQuestion in
+                        viewModel.questions[index] = updatedQuestion
+                        activeSheet = nil
+                    }
+
+                case .qr(let url):
+                    QRCodeView(url: url, quizTitle: viewModel.title)
                 }
             }
             .alert("Success!", isPresented: $showError) {
@@ -380,80 +372,99 @@ struct CreateQuizView: View {
     }
 }
 
-// MARK: - Question Card Component
-struct QuestionCard: View {
-    let number: Int
-    let question: QuizQuestion
-    let onDelete: () -> Void
-    let onEdit: () -> Void
-    
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // Number Badge
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [.purple.opacity(0.2), .pink.opacity(0.2)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+private extension CreateQuizView{
+    // MARK: - Question Card Component
+    struct QuestionCard: View {
+        let number: Int
+        let question: QuizQuestion
+        let onDelete: () -> Void
+        let onEdit: () -> Void
+        
+        var body: some View {
+            HStack(alignment: .top, spacing: 12) {
+                // Number Badge
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.purple.opacity(0.2), .pink.opacity(0.2)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .frame(width: 36, height: 36)
-                
-                Text("\(number)")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.purple)
-            }
-            
-            // Content
-            VStack(alignment: .leading, spacing: 8) {
-                Text(question.question)
-                    .font(.body)
-                    .fontWeight(.medium)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                HStack(spacing: 4) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundColor(.green)
+                        .frame(width: 36, height: 36)
                     
-                    Text(question.options[question.correctIndex])
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Color.green.opacity(0.1))
-                .cornerRadius(8)
-            }
-            
-            Spacer()
-            
-            HStack(spacing: 8) {
-                Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 14))
-                        .foregroundColor(.blue.opacity(0.7))
-                        .padding(8)
-                        .background(Color.blue.opacity(0.1))
-                        .clipShape(Circle())
+                    Text("\(number)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.purple)
                 }
                 
-                Button(action: onDelete) {
-                    Image(systemName: "trash.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(.red.opacity(0.7))
-                        .padding(8)
-                        .background(Color.red.opacity(0.1))
-                        .clipShape(Circle())
+                // Content
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(question.question)
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .fixedSize(horizontal: false, vertical: true)
+                    
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                        
+                        Text(question.options[question.correctIndex])
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(8)
                 }
+                
+                Spacer()
+                
+                HStack(spacing: 8) {
+                    Button(action: onEdit) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 14))
+                            .foregroundColor(.blue.opacity(0.7))
+                            .padding(8)
+                            .background(Color.blue.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    
+                    Button(action: onDelete) {
+                        Image(systemName: "trash.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.red.opacity(0.7))
+                            .padding(8)
+                            .background(Color.red.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                }
+            }
+            .padding()
+            .background(Color.white)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        }
+    }
+    
+    enum ActiveSheet: Identifiable {
+        case add
+        case edit(QuizQuestion, Int)
+        case qr(URL)
+        
+        var id: String {
+            switch self {
+            case .add:
+                return "add"
+            case .edit(let question, _):
+                return question.id.uuidString
+            case .qr(let url):
+                return url.absoluteString
             }
         }
-        .padding()
-        .background(Color.white)
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
     }
 }
 
